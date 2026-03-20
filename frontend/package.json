@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "NODE_OPTIONS=--max-old-space-size=4096 vitest",
-    "test:run": "NODE_OPTIONS=--max-old-space-size=4096 vitest run",
-    "coverage": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --coverage"
+    "test": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest",
+    "test:run": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run",
+    "coverage": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run --coverage"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.11.2",
@@ -35,6 +35,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.0.18",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

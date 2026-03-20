@@ -42,8 +42,21 @@ const Chat = () => {
     joinRoom();
     socket.on('connect', joinRoom);
 
+    // Direct listener using activeConversation._id as the key — this is the
+    // guaranteed-correct key that matches what fetchMessages stored in Redux.
+    // Complements the global SocketProvider listener and handles any
+    // ObjectId serialisation mismatch between socket event and state keys.
+    const convId = activeConversation._id;
+    const onMessage = (message) => {
+      if (String(message.conversationId) === String(convId)) {
+        dispatch(addMessage({ conversationId: convId, message }));
+      }
+    };
+    socket.on('receive_message', onMessage);
+
     return () => {
       socket.off('connect', joinRoom);
+      socket.off('receive_message', onMessage);
       socket.emit('leave_conversation', activeConversation._id);
     };
   }, [activeConversation, dispatch]);
