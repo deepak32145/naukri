@@ -273,3 +273,117 @@ describe('Save/unsave jobs', () => {
     expect(res.body.message).toMatch(/unsaved/i);
   });
 });
+
+// ─── GET SAVED JOBS ───────────────────────────────────────────────────────────
+
+describe('GET /api/jobs/candidate/saved', () => {
+  it('returns saved jobs for candidate', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'sv_r@test.com' });
+    const company = await createCompany(r._id);
+    const job = await createJob(r._id, company._id, { title: 'Saved Job' });
+    const { token: cToken } = await createUser('candidate', { email: 'sv_c@test.com' });
+
+    await request(app).post(`/api/jobs/${job._id}/save`).set('Authorization', `Bearer ${cToken}`);
+    const res = await request(app)
+      .get('/api/jobs/candidate/saved')
+      .set('Authorization', `Bearer ${cToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.some(j => j.title === 'Saved Job')).toBe(true);
+  });
+
+  it('returns 403 for recruiter', async () => {
+    const { token } = await createUser('recruiter');
+    const res = await request(app)
+      .get('/api/jobs/candidate/saved')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─── GET RECOMMENDED JOBS ─────────────────────────────────────────────────────
+
+describe('GET /api/jobs/candidate/recommended', () => {
+  it('returns recommended jobs based on candidate skills', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'rec_r@test.com' });
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { title: 'React Dev', skills: ['React', 'JavaScript'] });
+
+    const { user: c, token } = await createUser('candidate', { email: 'rec_c@test.com' });
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    await CandidateProfile.findOneAndUpdate({ userId: c._id }, { skills: ['React'] });
+
+    const res = await request(app)
+      .get('/api/jobs/candidate/recommended')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.length).toBeGreaterThan(0);
+  });
+
+  it('returns empty array when candidate profile has no skills or location', async () => {
+    const { token } = await createUser('candidate', { email: 'rec_empty@test.com' });
+    const res = await request(app)
+      .get('/api/jobs/candidate/recommended')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.jobs)).toBe(true);
+  });
+});
+
+// ─── GET JOBS — additional filters ───────────────────────────────────────────
+
+describe('GET /api/jobs — advanced filters', () => {
+  it('filters by salary range', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'sal_r@test.com' });
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { title: 'High Pay', salaryMin: 2000000, salaryMax: 3000000 });
+    await createJob(r._id, company._id, { title: 'Low Pay', salaryMin: 300000, salaryMax: 500000 });
+
+    const res = await request(app).get('/api/jobs?salaryMin=1000000');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.every(j => !j.salaryMin || j.salaryMin >= 1000000)).toBe(true);
+  });
+
+  it('filters by skills', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'sk_r@test.com' });
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { title: 'Python Dev', skills: ['Python', 'Django'] });
+    await createJob(r._id, company._id, { title: 'JS Dev', skills: ['JavaScript', 'React'] });
+
+    const res = await request(app).get('/api/jobs?skills=Python');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.some(j => j.skills.includes('Python'))).toBe(true);
+  });
+
+  it('filters by experience range', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'exp_r@test.com' });
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { title: 'Senior Dev', experienceMin: 5, experienceMax: 10 });
+    await createJob(r._id, company._id, { title: 'Fresher Dev', experienceMin: 0, experienceMax: 1 });
+
+    const res = await request(app).get('/api/jobs?experienceMin=5');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.every(j => j.experienceMin >= 5)).toBe(true);
+  });
+
+  it('sorts by salary (salary sort option)', async () => {
+    const { user: r } = await createUser('recruiter', { email: 'sort_r@test.com' });
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { salaryMax: 500000 });
+    await createJob(r._id, company._id, { salaryMax: 2000000 });
+
+    const res = await request(app).get('/api/jobs?sort=salary');
+    expect(res.status).toBe(200);
+  });
+});
+
+// ─── SAVE JOB — edge case ─────────────────────────────────────────────────────
+
+describe('Save job — 404 case', () => {
+  it('returns 404 when saving a non-existent job', async () => {
+    const { token } = await createUser('candidate');
+    const res = await request(app)
+      .post('/api/jobs/64a0000000000000000000ff/save')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+});

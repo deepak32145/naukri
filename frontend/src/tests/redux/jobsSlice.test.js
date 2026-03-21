@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { configureStore } from '@reduxjs/toolkit';
 import jobsReducer, {
   setFilters, clearFilters, toggleSaveJob,
-  fetchJobs, fetchJobById, fetchSavedJobs, fetchMyJobs,
+  fetchJobs, fetchJobById, fetchSavedJobs, fetchRecommended, fetchMyJobs,
 } from '../../redux/slices/jobsSlice';
 
 const makeStore = (preloadedState) =>
@@ -109,5 +109,53 @@ describe('jobsSlice — fetchJobById thunk', () => {
     const state = store.getState().jobs;
     expect(state.error).toBe('Job not found');
     expect(state.currentJob).toBeNull();
+  });
+});
+
+// ─── THUNK: fetchSavedJobs ───────────────────────────────────────────────────
+
+describe('jobsSlice — fetchSavedJobs thunk', () => {
+  it('sets savedJobs on success', async () => {
+    const store = makeStore();
+    await store.dispatch(fetchSavedJobs());
+    const state = store.getState().jobs;
+    expect(state.savedJobs).toHaveLength(1);
+    expect(state.savedJobs[0]._id).toBe('j1');
+  });
+
+  it('savedJobs is populated with correct title', async () => {
+    const store = makeStore();
+    await store.dispatch(fetchSavedJobs());
+    expect(store.getState().jobs.savedJobs[0].title).toBe('React Developer');
+  });
+});
+
+// ─── THUNK: fetchRecommended ─────────────────────────────────────────────────
+
+describe('jobsSlice — fetchRecommended thunk', () => {
+  it('sets recommendedJobs on success', async () => {
+    const store = makeStore();
+    await store.dispatch(fetchRecommended());
+    const state = store.getState().jobs;
+    expect(state.recommendedJobs).toHaveLength(1);
+    expect(state.recommendedJobs[0]._id).toBe('j2');
+  });
+});
+
+// ─── THUNK: fetchMyJobs ──────────────────────────────────────────────────────
+
+describe('jobsSlice — fetchMyJobs thunk', () => {
+  it('sets myJobs on success', async () => {
+    const store = makeStore();
+    await store.dispatch(fetchMyJobs());
+    const state = store.getState().jobs;
+    expect(state.myJobs).toHaveLength(1);
+    expect(state.myJobs[0].title).toBe('Senior Frontend Dev');
+  });
+
+  it('myJobs includes applicationsCount', async () => {
+    const store = makeStore();
+    await store.dispatch(fetchMyJobs());
+    expect(store.getState().jobs.myJobs[0].applicationsCount).toBe(5);
   });
 });

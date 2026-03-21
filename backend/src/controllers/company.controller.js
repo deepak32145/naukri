@@ -76,7 +76,7 @@ const uploadLogo = async (req, res) => {
 const getReviews = async (req, res) => {
   try {
     const reviews = await Review.find({ companyId: req.params.id })
-      .populate({ path: 'candidateId', select: 'name avatar', match: { $exists: true } })
+      .populate('candidateId', 'name avatar')
       .sort({ createdAt: -1 });
     // For anonymous reviews, hide candidateId name
     const safeReviews = reviews.map(r => {

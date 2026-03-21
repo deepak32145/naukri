@@ -12,7 +12,10 @@ jest.mock('../src/utils/email', () => ({
 
 jest.mock('../src/config/cloudinary', () => ({
   cloudinary: { uploader: { destroy: jest.fn().mockResolvedValue({ result: 'ok' }) } },
-  uploadAvatar: { single: () => (req, res, next) => next() },
+  uploadAvatar: { single: () => (req, res, next) => {
+    req.file = { path: 'http://cloudinary.com/avatar.jpg', filename: 'avatar_123', originalname: 'avatar.jpg' };
+    next();
+  }},
   uploadResume: { single: () => (req, res, next) => next() },
   uploadLogo: { single: () => (req, res, next) => next() },
 }));
@@ -152,5 +155,124 @@ describe('GET /api/users/online-recruiters', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.recruiters.length).toBe(0);
+  });
+});
+
+// ─── UPDATE AVATAR ────────────────────────────────────────────────────────────
+
+describe('PUT /api/users/me/avatar', () => {
+  it('uploads avatar successfully', async () => {
+    const { token } = await createUser('candidate');
+    const res = await request(app)
+      .put('/api/users/me/avatar')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('avatar', Buffer.from('fake image data'), 'avatar.jpg');
+    expect(res.status).toBe(200);
+    expect(res.body.avatar.url).toBe('http://cloudinary.com/avatar.jpg');
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await request(app)
+      .put('/api/users/me/avatar')
+      .attach('avatar', Buffer.from('fake image data'), 'avatar.jpg');
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── DELETE ACCOUNT ───────────────────────────────────────────────────────────
+
+describe('DELETE /api/users/me', () => {
+  it('deletes the user account', async () => {
+    const { user, token } = await createUser('candidate');
+    const User = require('../src/models/User.model');
+    const res = await request(app)
+      .delete('/api/users/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/deleted/i);
+    const deleted = await User.findById(user._id);
+    expect(deleted).toBeNull();
+  });
+
+  it('returns 401 without token', async () => {
+    const res = await request(app).delete('/api/users/me');
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── GET USER BY ID — profile view logging ────────────────────────────────────
+
+describe('GET /api/users/:id — profile view', () => {
+  it('logs profile view when recruiter views candidate', async () => {
+    const { user: candidate } = await createUser('candidate', { email: 'pv_cand@test.com' });
+    const { token: rToken } = await createUser('recruiter', { email: 'pv_rec@test.com' });
+    const res = await request(app)
+      .get(`/api/users/${candidate._id}`)
+      .set('Authorization', `Bearer ${rToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profile).toBeDefined();
+  });
+
+  it('does not log view when user views own profile', async () => {
+    const { user: candidate, token } = await createUser('candidate', { email: 'pv_own@test.com' });
+    const res = await request(app)
+      .get(`/api/users/${candidate._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+  });
+});
+
+// ─── SEARCH CANDIDATES — advanced filters ────────────────────────────────────
+
+describe('GET /api/users — search candidates with filters', () => {
+  it('filters candidates by skills', async () => {
+    const { user: c1 } = await createUser('candidate', { email: 'sf_c1@test.com' });
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    await CandidateProfile.findOneAndUpdate({ userId: c1._id }, { skills: ['Python'] });
+
+    const { token: rToken } = await createUser('recruiter', { email: 'sf_r@test.com' });
+    const res = await request(app)
+      .get('/api/users?skills=Python')
+      .set('Authorization', `Bearer ${rToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profiles.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters candidates by location', async () => {
+    const { user: c } = await createUser('candidate', { email: 'loc_c@test.com' });
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    await CandidateProfile.findOneAndUpdate({ userId: c._id }, { currentLocation: 'Bengaluru' });
+
+    const { token: rToken } = await createUser('recruiter', { email: 'loc_r@test.com' });
+    const res = await request(app)
+      .get('/api/users?location=Bengaluru')
+      .set('Authorization', `Bearer ${rToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profiles.every(p => /bengaluru/i.test(p.currentLocation))).toBe(true);
+  });
+
+  it('filters candidates by experience range', async () => {
+    const { user: c } = await createUser('candidate', { email: 'exp_c@test.com' });
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    await CandidateProfile.findOneAndUpdate({ userId: c._id }, { experienceYears: 5 });
+
+    const { token: rToken } = await createUser('recruiter', { email: 'exp_r@test.com' });
+    const res = await request(app)
+      .get('/api/users?experienceMin=4&experienceMax=8')
+      .set('Authorization', `Bearer ${rToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profiles.every(p => p.experienceYears >= 4 && p.experienceYears <= 8)).toBe(true);
+  });
+
+  it('filters candidates by keyword (headline/summary)', async () => {
+    const { user: c } = await createUser('candidate', { email: 'kw_c@test.com' });
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    await CandidateProfile.findOneAndUpdate({ userId: c._id }, { headline: 'Senior Node.js Developer' });
+
+    const { token: rToken } = await createUser('recruiter', { email: 'kw_r@test.com' });
+    const res = await request(app)
+      .get('/api/users?keyword=Senior')
+      .set('Authorization', `Bearer ${rToken}`);
+    expect(res.status).toBe(200);
   });
 });

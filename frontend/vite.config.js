@@ -9,6 +9,14 @@ export default defineConfig({
     setupFiles: ['./src/tests/setup.js'],
     globals: true,
     css: false,
+    testTimeout: 15000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['html', 'text-summary', 'text'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/tests/**', 'src/main.jsx'],
+    },
   },
   server: {
     port: 5173,
