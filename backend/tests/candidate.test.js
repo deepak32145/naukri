@@ -152,16 +152,18 @@ describe('DELETE /api/candidate/resume', () => {
 // ─── GET /api/candidate/profile-views ─────────────────────────────────────────
 
 describe('GET /api/candidate/profile-views', () => {
-  it('returns empty profile views by default', async () => {
+  it('returns empty profile views with zero stats by default', async () => {
     const { token } = await createUser('candidate');
     const res = await request(app)
       .get('/api/candidate/profile-views')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.profileViews).toEqual([]);
+    expect(res.body.total).toBe(0);
+    expect(res.body.thisWeek).toBe(0);
   });
 
-  it('returns profile views after a recruiter views the profile', async () => {
+  it('returns profile views with total and thisWeek counts after a recruiter views', async () => {
     const { user: candidate, token } = await createUser('candidate', { email: 'cand_pv@test.com' });
     const { user: recruiter } = await createUser('recruiter', { email: 'rec_pv@test.com' });
     await CandidateProfile.findOneAndUpdate(
@@ -174,6 +176,92 @@ describe('GET /api/candidate/profile-views', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.profileViews).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+    expect(res.body.thisWeek).toBe(1);
+  });
+
+  it('counts only views from the last 7 days in thisWeek', async () => {
+    const { user: candidate, token } = await createUser('candidate', { email: 'cand_tw@test.com' });
+    const { user: recruiter } = await createUser('recruiter', { email: 'rec_tw@test.com' });
+
+    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+    await CandidateProfile.findOneAndUpdate(
+      { userId: candidate._id },
+      {
+        $push: {
+          profileViews: {
+            $each: [
+              { viewedBy: recruiter._id, viewedAt: new Date() },      // this week
+              { viewedBy: recruiter._id, viewedAt: oldDate },          // older than 7 days
+            ],
+          },
+        },
+      }
+    );
+
+    const res = await request(app)
+      .get('/api/candidate/profile-views')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(res.body.thisWeek).toBe(1);
+  });
+
+  it('populates recruiter name in profileViews', async () => {
+    const { user: candidate, token } = await createUser('candidate', { email: 'cand_pop@test.com' });
+    const { user: recruiter } = await createUser('recruiter', { email: 'rec_pop@test.com', name: 'Jane Recruiter' });
+    await CandidateProfile.findOneAndUpdate(
+      { userId: candidate._id },
+      { $push: { profileViews: { viewedBy: recruiter._id, viewedAt: new Date() } } }
+    );
+
+    const res = await request(app)
+      .get('/api/candidate/profile-views')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.profileViews[0].viewedBy).toBeDefined();
+    expect(res.body.profileViews[0].viewedBy.name).toBe('Jane Recruiter');
+  });
+
+  it('returns 401 without auth token', async () => {
+    const res = await request(app).get('/api/candidate/profile-views');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for recruiter role', async () => {
+    const { token } = await createUser('recruiter');
+    const res = await request(app)
+      .get('/api/candidate/profile-views')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns most recent views first (newest at top)', async () => {
+    const { user: candidate, token } = await createUser('candidate', { email: 'cand_order@test.com' });
+    const { user: recruiter } = await createUser('recruiter', { email: 'rec_order@test.com' });
+
+    const older = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const newer = new Date();
+    await CandidateProfile.findOneAndUpdate(
+      { userId: candidate._id },
+      {
+        $push: {
+          profileViews: {
+            $each: [
+              { viewedBy: recruiter._id, viewedAt: older },
+              { viewedBy: recruiter._id, viewedAt: newer },
+            ],
+          },
+        },
+      }
+    );
+
+    const res = await request(app)
+      .get('/api/candidate/profile-views')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(new Date(res.body.profileViews[0].viewedAt).getTime())
+      .toBeGreaterThan(new Date(res.body.profileViews[1].viewedAt).getTime());
   });
 });
 

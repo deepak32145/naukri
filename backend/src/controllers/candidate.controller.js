@@ -93,7 +93,14 @@ const getProfileViews = async (req, res) => {
     const profile = await CandidateProfile.findOne({ userId: req.user._id })
       .populate('profileViews.viewedBy', 'name avatar role');
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
-    res.json({ success: true, profileViews: profile.profileViews.slice(-50).reverse() });
+
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const total = profile.profileViews.length;
+    const thisWeek = profile.profileViews.filter((v) => new Date(v.viewedAt) >= weekAgo).length;
+    const recentViews = profile.profileViews.slice(-50).reverse();
+
+    res.json({ success: true, total, thisWeek, profileViews: recentViews });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

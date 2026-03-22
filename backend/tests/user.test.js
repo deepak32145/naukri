@@ -202,23 +202,64 @@ describe('DELETE /api/users/me', () => {
 
 // ─── GET USER BY ID — profile view logging ────────────────────────────────────
 
-describe('GET /api/users/:id — profile view', () => {
-  it('logs profile view when recruiter views candidate', async () => {
+describe('GET /api/users/:id — profile view logging', () => {
+  it('logs profile view in DB when a recruiter views a candidate', async () => {
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
     const { user: candidate } = await createUser('candidate', { email: 'pv_cand@test.com' });
-    const { token: rToken } = await createUser('recruiter', { email: 'pv_rec@test.com' });
+    const { user: recruiter, token: rToken } = await createUser('recruiter', { email: 'pv_rec@test.com' });
+
+    await request(app)
+      .get(`/api/users/${candidate._id}`)
+      .set('Authorization', `Bearer ${rToken}`);
+
+    const profile = await CandidateProfile.findOne({ userId: candidate._id });
+    expect(profile.profileViews).toHaveLength(1);
+    expect(profile.profileViews[0].viewedBy.toString()).toBe(recruiter._id.toString());
+  });
+
+  it('does NOT log a view when a candidate views their own profile', async () => {
+    const CandidateProfile = require('../src/models/CandidateProfile.model');
+    const { user: candidate, token } = await createUser('candidate', { email: 'pv_own@test.com' });
+
+    await request(app)
+      .get(`/api/users/${candidate._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const profile = await CandidateProfile.findOne({ userId: candidate._id });
+    expect(profile.profileViews).toHaveLength(0);
+  });
+
+  it('does not expose jobAlerts or profileViews in the public profile response', async () => {
+    const { user: candidate } = await createUser('candidate', { email: 'pv_priv@test.com' });
+    const { token: rToken } = await createUser('recruiter', { email: 'pv_priv_r@test.com' });
+
     const res = await request(app)
       .get(`/api/users/${candidate._id}`)
       .set('Authorization', `Bearer ${rToken}`);
+
     expect(res.status).toBe(200);
-    expect(res.body.profile).toBeDefined();
+    expect(res.body.profile?.profileViews).toBeUndefined();
+    expect(res.body.profile?.jobAlerts).toBeUndefined();
   });
 
-  it('does not log view when user views own profile', async () => {
-    const { user: candidate, token } = await createUser('candidate', { email: 'pv_own@test.com' });
+  it('does not return profile for non-candidate user', async () => {
+    const { user: recruiter } = await createUser('recruiter', { email: 'pv_norec@test.com' });
+    const { token } = await createUser('candidate', { email: 'pv_viewer@test.com' });
+
     const res = await request(app)
-      .get(`/api/users/${candidate._id}`)
+      .get(`/api/users/${recruiter._id}`)
       .set('Authorization', `Bearer ${token}`);
+
     expect(res.status).toBe(200);
+    expect(res.body.profile).toBeNull();
+  });
+
+  it('returns 404 for non-existent user id', async () => {
+    const { token } = await createUser('recruiter', { email: 'pv_404@test.com' });
+    const res = await request(app)
+      .get('/api/users/64a0000000000000000000ff')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
   });
 });
 

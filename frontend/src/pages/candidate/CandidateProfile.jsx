@@ -13,7 +13,7 @@ const CandidateProfile = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((s) => s.auth);
   const [profile, setProfile] = useState(null);
-  const [profileViews, setProfileViews] = useState([]);
+  const [viewStats, setViewStats] = useState({ total: 0, thisWeek: 0, profileViews: [] });
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -25,7 +25,11 @@ const CandidateProfile = () => {
           api.get('/candidate/profile-views'),
         ]);
         setProfile(profileRes.data.profile);
-        setProfileViews(viewsRes.data.profileViews);
+        setViewStats({
+          total: viewsRes.data.total || 0,
+          thisWeek: viewsRes.data.thisWeek || 0,
+          profileViews: viewsRes.data.profileViews || [],
+        });
       } catch (err) { console.error(err); }
       finally { setLoading(false); }
     };
@@ -136,26 +140,23 @@ const CandidateProfile = () => {
             )}
           </div>
 
-          {/* Profile Views */}
-          {profileViews.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">Profile Views</h3>
-                <div className="flex items-center gap-1 text-indigo-600"><Eye size={14} /><span className="text-sm font-bold">{profileViews.length}</span></div>
+          {/* Profile Views Summary (sidebar) */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <Eye size={16} className="text-indigo-600" />
+              <h3 className="font-semibold text-gray-900">Profile Views</h3>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex-1 text-center bg-indigo-50 rounded-xl py-3">
+                <p className="text-2xl font-bold text-indigo-600">{viewStats.total}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Total</p>
               </div>
-              <div className="space-y-2">
-                {profileViews.slice(0, 5).map((v, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">{getInitials(v.viewedBy?.name || '?')}</div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-800">{v.viewedBy?.name || 'Someone'}</p>
-                      <p className="text-xs text-gray-400">{timeAgo(v.viewedAt)}</p>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex-1 text-center bg-green-50 rounded-xl py-3">
+                <p className="text-2xl font-bold text-green-600">{viewStats.thisWeek}</p>
+                <p className="text-xs text-gray-500 mt-0.5">This week</p>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Right Column */}
@@ -257,6 +258,49 @@ const CandidateProfile = () => {
               </div>
             </div>
           )}
+
+          {/* Profile Views Detail */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Eye size={18} className="text-indigo-600" />
+                <h3 className="font-semibold text-gray-900">Who Viewed Your Profile</h3>
+              </div>
+              <div className="flex gap-3 text-xs">
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-medium">{viewStats.total} total</span>
+                <span className="px-2.5 py-1 bg-green-50 text-green-700 rounded-lg font-medium">{viewStats.thisWeek} this week</span>
+              </div>
+            </div>
+            {viewStats.profileViews.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Eye size={22} className="text-gray-300" />
+                </div>
+                <p className="text-sm text-gray-500 font-medium">No views yet</p>
+                <p className="text-xs text-gray-400 mt-1">Recruiters who view your profile will appear here</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {viewStats.profileViews.slice(0, 10).map((v, i) => (
+                  <div key={i} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
+                      {v.viewedBy?.avatar?.url
+                        ? <img src={v.viewedBy.avatar.url} alt={v.viewedBy.name} className="w-9 h-9 rounded-full object-cover" />
+                        : getInitials(v.viewedBy?.name || '?')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{v.viewedBy?.name || 'A recruiter'}</p>
+                      <p className="text-xs text-gray-400 capitalize">{v.viewedBy?.role || 'recruiter'}</p>
+                    </div>
+                    <p className="text-xs text-gray-400 shrink-0">{timeAgo(v.viewedAt)}</p>
+                  </div>
+                ))}
+                {viewStats.profileViews.length > 10 && (
+                  <p className="text-xs text-center text-gray-400 pt-3">+{viewStats.profileViews.length - 10} more views</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {(!profile?.summary && !profile?.experience?.length && !profile?.education?.length) && (
             <div className="bg-white rounded-2xl border-2 border-dashed border-indigo-200 p-10 text-center shadow-sm">
