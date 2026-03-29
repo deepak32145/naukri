@@ -109,4 +109,16 @@ const emailTemplates = {
   }),
 };
 
-module.exports = { sendEmail, emailTemplates };
+// Queue an email via BullMQ. Falls back to direct send if Redis is unavailable.
+const queueEmail = async ({ to, subject, html }) => {
+  try {
+    const { getEmailQueue } = require('../config/emailQueue');
+    const queue = getEmailQueue();
+    await queue.add('send', { to, subject, html });
+  } catch {
+    // Redis down — send synchronously so the email still goes out
+    await sendEmail({ to, subject, html });
+  }
+};
+
+module.exports = { sendEmail, queueEmail, emailTemplates };

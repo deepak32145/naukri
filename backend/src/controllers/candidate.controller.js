@@ -1,5 +1,6 @@
 const CandidateProfile = require('../models/CandidateProfile.model');
 const { cloudinary } = require('../config/cloudinary');
+const { parseResume } = require('../utils/resumeParser');
 
 // @GET /api/candidate/profile
 const getProfile = async (req, res) => {
@@ -144,4 +145,77 @@ const deleteJobAlert = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, updateProfile, uploadResume, deleteResume, getProfileViews, createJobAlert, getJobAlerts, deleteJobAlert };
+// @POST /api/candidate/verify
+const requestVerification = async (req, res) => {
+  try {
+    const profile = await CandidateProfile.findOne({ userId: req.user._id });
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+    if (profile.verificationStatus === 'verified') {
+      return res.status(400).json({ success: false, message: 'Already verified' });
+    }
+    if (profile.verificationStatus === 'pending') {
+      return res.status(400).json({ success: false, message: 'Verification already requested' });
+    }
+    if (profile.completenessScore < 60) {
+      return res.status(400).json({ success: false, message: 'Profile must be at least 60% complete to request verification' });
+    }
+    await CandidateProfile.findByIdAndUpdate(profile._id, { verificationStatus: 'pending' });
+    res.json({ success: true, message: 'Verification request submitted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @POST /api/candidate/resume/parse
+// Accepts a PDF upload (memory storage), returns parsed profile JSON preview.
+const parseResumeUpload = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const parsed = await parseResume(req.file.buffer);
+    res.json({ success: true, parsed });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @POST /api/candidate/profile/import
+// Merges parsed profile data into the candidate's CandidateProfile.
+const importParsedProfile = async (req, res) => {
+  try {
+    const {
+      headline, summary, currentLocation, experienceYears, skills,
+      githubUrl, linkedinUrl, portfolioUrl,
+      experience, education, projects, certifications, languages,
+    } = req.body;
+
+    const updateFields = {};
+    if (headline) updateFields.headline = headline;
+    if (summary) updateFields.summary = summary;
+    if (currentLocation) updateFields.currentLocation = currentLocation;
+    if (experienceYears != null) updateFields.experienceYears = experienceYears;
+    if (skills?.length) updateFields.skills = skills;
+    if (githubUrl) updateFields.githubUrl = githubUrl;
+    if (linkedinUrl) updateFields.linkedinUrl = linkedinUrl;
+    if (portfolioUrl) updateFields.portfolioUrl = portfolioUrl;
+    if (experience?.length) updateFields.experience = experience;
+    if (education?.length) updateFields.education = education;
+    if (projects?.length) updateFields.projects = projects;
+    if (certifications?.length) updateFields.certifications = certifications;
+    if (languages?.length) updateFields.languages = languages;
+
+    const profile = await CandidateProfile.findOneAndUpdate(
+      { userId: req.user._id },
+      updateFields,
+      { new: true, runValidators: true }
+    );
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    profile.calculateCompleteness();
+    await profile.save();
+    res.json({ success: true, profile });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getProfile, updateProfile, uploadResume, deleteResume, getProfileViews, createJobAlert, getJobAlerts, deleteJobAlert, requestVerification, parseResumeUpload, importParsedProfile };

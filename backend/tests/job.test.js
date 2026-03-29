@@ -18,8 +18,25 @@ jest.mock('../src/config/cloudinary', () => ({
   uploadLogo: { single: () => (req, res, next) => next() },
 }));
 
+// Redis mock — returns cache miss by default so all existing tests hit MongoDB
+jest.mock('../src/config/redis', () => ({
+  get: jest.fn().mockResolvedValue(null),
+  setEx: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+  keys: jest.fn().mockResolvedValue([]),
+}));
+
 beforeAll(async () => { await connect(); });
-afterEach(async () => { await clearDB(); });
+afterEach(async () => {
+  await clearDB();
+  const redis = require('../src/config/redis');
+  jest.clearAllMocks();
+  // Reset to default cache-miss behaviour after each test
+  redis.get.mockResolvedValue(null);
+  redis.setEx.mockResolvedValue(undefined);
+  redis.del.mockResolvedValue(undefined);
+  redis.keys.mockResolvedValue([]);
+});
 afterAll(async () => { await disconnect(); });
 
 // ─── CREATE JOB ───────────────────────────────────────────────────────────────
@@ -383,6 +400,147 @@ describe('Save job — 404 case', () => {
     const { token } = await createUser('candidate');
     const res = await request(app)
       .post('/api/jobs/64a0000000000000000000ff/save')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── REDIS CACHING — GET /api/jobs ───────────────────────────────────────────
+
+describe('Redis cache — GET /api/jobs', () => {
+  it('stores result in Redis after a cache miss', async () => {
+    const redis = require('../src/config/redis');
+    const { user: r } = await createUser('recruiter');
+    const company = await createCompany(r._id);
+    await createJob(r._id, company._id, { title: 'Cached Job' });
+
+    const res = await request(app).get('/api/jobs');
+    expect(res.status).toBe(200);
+    // setEx should have been called once with a jobs: key and 120s TTL
+    expect(redis.setEx).toHaveBeenCalledTimes(1);
+    const [key, ttl] = redis.setEx.mock.calls[0];
+    expect(key).toMatch(/^jobs:/);
+    expect(ttl).toBe(120);
+  });
+
+  it('returns cached result without calling setEx on cache hit', async () => {
+    const redis = require('../src/config/redis');
+    const cachedPayload = {
+      success: true,
+      jobs: [{ _id: 'abc', title: 'From Cache', location: 'Remote' }],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    };
+    redis.get.mockResolvedValue(JSON.stringify(cachedPayload));
+
+    const res = await request(app).get('/api/jobs');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs[0].title).toBe('From Cache');
+    // setEx must NOT be called — we served from cache
+    expect(redis.setEx).not.toHaveBeenCalled();
+  });
+
+  it('invalidates jobs:* cache when a new job is created', async () => {
+    const redis = require('../src/config/redis');
+    redis.keys.mockResolvedValue(['jobs:{}', 'jobs:{"keyword":"react"}']);
+
+    const { user: r, token } = await createUser('recruiter');
+    await createCompany(r._id);
+    await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'New Job',
+        description: 'desc',
+        location: 'Delhi',
+        jobType: 'full-time',
+        experienceMin: 0,
+        experienceMax: 2,
+        skills: ['JS'],
+        openings: 1,
+      });
+
+    // del should have been called with the keys returned by keys()
+    expect(redis.del).toHaveBeenCalledWith(['jobs:{}', 'jobs:{"keyword":"react"}']);
+  });
+
+  it('invalidates jobs:* and job:<id> cache when a job is updated', async () => {
+    const redis = require('../src/config/redis');
+    redis.keys.mockResolvedValue(['jobs:{}']);
+
+    const { user: r, token } = await createUser('recruiter');
+    const company = await createCompany(r._id);
+    const job = await createJob(r._id, company._id);
+
+    await request(app)
+      .put(`/api/jobs/${job._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Updated' });
+
+    expect(redis.del).toHaveBeenCalledWith(['jobs:{}']);              // list cache
+    expect(redis.del).toHaveBeenCalledWith([`job:${job._id}`]);      // detail cache
+  });
+
+  it('invalidates jobs:* and job:<id> cache when a job is deleted', async () => {
+    const redis = require('../src/config/redis');
+    redis.keys.mockResolvedValue(['jobs:{}']);
+
+    const { user: r, token } = await createUser('recruiter');
+    const company = await createCompany(r._id);
+    const job = await createJob(r._id, company._id);
+
+    await request(app)
+      .delete(`/api/jobs/${job._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(redis.del).toHaveBeenCalledWith(['jobs:{}']);
+    expect(redis.del).toHaveBeenCalledWith([`job:${job._id}`]);
+  });
+});
+
+// ─── REDIS CACHING — GET /api/jobs/:id ───────────────────────────────────────
+
+describe('Redis cache — GET /api/jobs/:id', () => {
+  it('stores job and similar in Redis after a cache miss', async () => {
+    const redis = require('../src/config/redis');
+    const { user: r, token } = await createUser('recruiter');
+    const company = await createCompany(r._id);
+    const job = await createJob(r._id, company._id);
+
+    const res = await request(app)
+      .get(`/api/jobs/${job._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    expect(redis.setEx).toHaveBeenCalledTimes(1);
+    const [key, ttl] = redis.setEx.mock.calls[0];
+    expect(key).toBe(`job:${job._id}`);
+    expect(ttl).toBe(300);
+  });
+
+  it('returns cached job without calling setEx on cache hit', async () => {
+    const redis = require('../src/config/redis');
+    const { user: r, token } = await createUser('recruiter');
+    const company = await createCompany(r._id);
+    const job = await createJob(r._id, company._id, { title: 'Real Job' });
+
+    // Simulate a cached version with a different title
+    const cached = { job: { ...job.toObject(), title: 'Cached Title', savedBy: [] }, similar: [] };
+    redis.get.mockResolvedValue(JSON.stringify(cached));
+
+    const res = await request(app)
+      .get(`/api/jobs/${job._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.job.title).toBe('Cached Title');
+    expect(redis.setEx).not.toHaveBeenCalled();
+  });
+
+  it('still returns 404 for non-existent job even with cache miss', async () => {
+    const { token } = await createUser('candidate');
+    const res = await request(app)
+      .get('/api/jobs/64a0000000000000000000bb')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });

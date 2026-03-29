@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchJobById } from '../redux/slices/jobsSlice';
 import { MapPin, Briefcase, IndianRupee, Clock, Users, BookmarkCheck, Bookmark, Share2, BadgeCheck, Building2, Star, ExternalLink } from 'lucide-react';
@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 
 const JobDetail = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentJob: job, similarJobs, loading } = useSelector((s) => s.jobs);
@@ -37,7 +38,8 @@ const JobDetail = () => {
     if (!isAuthenticated) { navigate('/login'); return; }
     setApplying(true);
     try {
-      await api.post(`/applications/jobs/${id}/apply`, { coverLetter });
+      const referredBy = searchParams.get('ref');
+      await api.post(`/applications/jobs/${id}/apply`, { coverLetter, ...(referredBy && { referredBy }) });
       setHasApplied(true);
       setShowApplyModal(false);
       toast.success('Application submitted successfully!');
@@ -86,7 +88,16 @@ const JobDetail = () => {
                     <button onClick={handleSave} className={`p-2 rounded-lg border transition-colors ${isSaved ? 'border-indigo-300 text-indigo-600 bg-indigo-50' : 'border-gray-200 text-gray-500 hover:border-indigo-300'}`}>
                       {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
                     </button>
-                    <button onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success('Link copied!'); }}
+                    <button
+                      onClick={() => {
+                        const base = window.location.href.split('?')[0];
+                        const link = isAuthenticated && user?.role === 'candidate'
+                          ? `${base}?ref=${user._id}`
+                          : base;
+                        navigator.clipboard.writeText(link);
+                        toast.success(isAuthenticated && user?.role === 'candidate' ? 'Referral link copied!' : 'Link copied!');
+                      }}
+                      title={isAuthenticated && user?.role === 'candidate' ? 'Copy referral link' : 'Copy link'}
                       className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:border-gray-300">
                       <Share2 size={18} />
                     </button>

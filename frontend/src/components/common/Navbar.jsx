@@ -44,6 +44,7 @@ const Navbar = () => {
     { to: '/recruiter/jobs', label: 'My Jobs' },
     { to: '/recruiter/post-job', label: 'Post Job' },
     { to: '/recruiter/search-candidates', label: 'Find Candidates' },
+    { to: '/recruiter/analytics', label: 'Analytics' },
     { to: '/recruiter/company', label: 'Company' },
   ];
 
@@ -94,7 +95,7 @@ const Navbar = () => {
 
                 {/* Notifications */}
                 <div ref={notiRef} className="relative">
-                  <button onClick={() => { setNotiOpen(!notiOpen); setAvatarOpen(false); }} className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg relative">
+                  <button onClick={() => { const opening = !notiOpen; setNotiOpen(opening); setAvatarOpen(false); if (opening && unreadCount > 0) dispatch(markAllRead()); }} className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg relative">
                     <Bell size={20} />
                     {unreadCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full font-bold">{unreadCount > 9 ? '9+' : unreadCount}</span>

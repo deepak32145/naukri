@@ -31,6 +31,8 @@ import Applicants from './pages/recruiter/Applicants';
 import CandidateSearch from './pages/recruiter/CandidateSearch';
 import CompanySetup from './pages/recruiter/CompanySetup';
 import EditJob from './pages/recruiter/EditJob';
+import Analytics from './pages/recruiter/Analytics';
+import ResumeBuilder from './pages/candidate/ResumeBuilder';
 
 // Shared Pages
 import Chat from './pages/Chat';
@@ -79,6 +81,7 @@ function App() {
           <Route path="/applications" element={<ProtectedRoute roles={['candidate']}><MyApplications /></ProtectedRoute>} />
           <Route path="/saved-jobs" element={<ProtectedRoute roles={['candidate']}><SavedJobs /></ProtectedRoute>} />
           <Route path="/job-alerts" element={<ProtectedRoute roles={['candidate']}><JobAlerts /></ProtectedRoute>} />
+          <Route path="/resume-builder" element={<ProtectedRoute roles={['candidate']}><ResumeBuilder /></ProtectedRoute>} />
 
           {/* Recruiter Routes */}
           <Route path="/recruiter/dashboard" element={<ProtectedRoute roles={['recruiter']}><RecruiterDashboard /></ProtectedRoute>} />
@@ -88,6 +91,7 @@ function App() {
           <Route path="/recruiter/jobs/:jobId/applicants" element={<ProtectedRoute roles={['recruiter']}><Applicants /></ProtectedRoute>} />
           <Route path="/recruiter/search-candidates" element={<ProtectedRoute roles={['recruiter']}><CandidateSearch /></ProtectedRoute>} />
           <Route path="/recruiter/company" element={<ProtectedRoute roles={['recruiter']}><CompanySetup /></ProtectedRoute>} />
+          <Route path="/recruiter/analytics" element={<ProtectedRoute roles={['recruiter']}><Analytics /></ProtectedRoute>} />
 
           {/* Shared Auth Routes */}
           <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />

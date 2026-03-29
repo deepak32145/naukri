@@ -5,12 +5,16 @@ const morgan = require('morgan');
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const { initSocket } = require('./src/utils/socket');
+const { startEmailWorker } = require('./src/workers/email.worker');
+const { startDigestWorker } = require('./src/workers/digest.worker');
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
 connectDB();
+startEmailWorker();
+startDigestWorker();
 
 const server = http.createServer(app);
 const io = initSocket(server);

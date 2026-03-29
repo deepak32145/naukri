@@ -77,6 +77,7 @@ const candidateProfileSchema = new mongoose.Schema({
     viewedAt: { type: Date, default: Date.now },
   }],
   completenessScore: { type: Number, default: 0 },
+  verificationStatus: { type: String, enum: ['none', 'pending', 'verified'], default: 'none' },
   jobAlerts: [jobAlertSchema],
   isOpenToWork: { type: Boolean, default: true },
   githubUrl: { type: String },

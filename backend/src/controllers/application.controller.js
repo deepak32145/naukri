@@ -3,7 +3,7 @@ const Job = require('../models/Job.model');
 const User = require('../models/User.model');
 const Company = require('../models/Company.model');
 const { createNotification } = require('../utils/notification');
-const { sendEmail, emailTemplates } = require('../utils/email');
+const { queueEmail, emailTemplates } = require('../utils/email');
 
 let io;
 const setIo = (socketIo) => { io = socketIo; };
@@ -11,7 +11,7 @@ const setIo = (socketIo) => { io = socketIo; };
 // @POST /api/applications/jobs/:jobId/apply
 const applyToJob = async (req, res) => {
   try {
-    const { coverLetter } = req.body;
+    const { coverLetter, referredBy } = req.body;
     const job = await Job.findById(req.params.jobId).populate('companyId', 'name');
     if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
     if (job.status !== 'active') return res.status(400).json({ success: false, message: 'Job is not accepting applications' });
@@ -29,6 +29,7 @@ const applyToJob = async (req, res) => {
       coverLetter,
       resume: profile?.resume ? { url: profile.resume.url, name: profile.resume.name } : {},
       timeline: [{ status: 'applied', note: 'Application submitted', updatedBy: req.user._id }],
+      referredBy: referredBy || null,
     });
 
     await Job.findByIdAndUpdate(req.params.jobId, { $inc: { applicationsCount: 1 } });
@@ -78,6 +79,7 @@ const getJobApplications = async (req, res) => {
     const skip = (page - 1) * limit;
     const applications = await Application.find(query)
       .populate('candidateId', 'name email avatar phone')
+      .populate('referredBy', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -134,7 +136,7 @@ const updateApplicationStatus = async (req, res) => {
       companyName,
       status
     );
-    await sendEmail({ to: application.candidateId.email, ...tpl });
+    queueEmail({ to: application.candidateId.email, ...tpl });
 
     if (io) {
       io.to(application.candidateId._id.toString()).emit('application_status_update', {
@@ -184,7 +186,7 @@ const scheduleInterview = async (req, res) => {
       companyName,
       date, time, mode, link
     );
-    await sendEmail({ to: application.candidateId.email, ...tpl });
+    queueEmail({ to: application.candidateId.email, ...tpl });
 
     res.json({ success: true, application });
   } catch (error) {
@@ -207,4 +209,104 @@ const withdrawApplication = async (req, res) => {
   }
 };
 
-module.exports = { setIo, applyToJob, getMyApplications, getJobApplications, updateApplicationStatus, scheduleInterview, withdrawApplication };
+// @PUT /api/applications/bulk-status  (recruiter)
+const bulkUpdateStatus = async (req, res) => {
+  try {
+    const { applicationIds, status, note } = req.body;
+    if (!applicationIds?.length || !status) {
+      return res.status(400).json({ success: false, message: 'applicationIds and status are required' });
+    }
+
+    const applications = await Application.findOne
+      ? await Application.find({ _id: { $in: applicationIds } })
+          .populate('candidateId', 'name email')
+          .populate({ path: 'jobId', populate: { path: 'companyId', select: 'name' } })
+      : [];
+
+    // Verify recruiter owns all these jobs
+    const unauthorized = applications.filter(
+      a => a.jobId?.postedBy?.toString() !== req.user._id.toString()
+    );
+    if (unauthorized.length) {
+      return res.status(403).json({ success: false, message: 'Not authorized for some applications' });
+    }
+
+    await Application.updateMany(
+      { _id: { $in: applicationIds } },
+      { status, $push: { timeline: { status, note: note || '', updatedBy: req.user._id } } }
+    );
+
+    // Fire-and-forget: notify + email each candidate
+    for (const app of applications) {
+      const companyName = app.jobId?.companyId?.name || 'the company';
+      createNotification({
+        userId: app.candidateId._id,
+        type: 'application_update',
+        title: `Application ${status.replace(/_/g, ' ')}`,
+        body: `Your application for ${app.jobId?.title} is now ${status.replace(/_/g, ' ')}`,
+        link: '/applications',
+        relatedId: app._id,
+        io,
+      });
+      queueEmail({
+        to: app.candidateId.email,
+        ...emailTemplates.applicationStatus(app.candidateId.name, app.jobId?.title, companyName, status),
+      });
+    }
+
+    res.json({ success: true, updated: applicationIds.length });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @GET /api/applications/analytics  (recruiter)
+const getAnalytics = async (req, res) => {
+  try {
+    const company = await Company.findOne({ createdBy: req.user._id });
+    if (!company) return res.json({ success: true, analytics: { statusBreakdown: [], applicationsOverTime: [], topJobs: [], totalApplications: 0, hired: 0, hireRate: 0, totalJobs: 0, totalViews: 0 } });
+
+    const jobs = await Job.find({ companyId: company._id }).select('_id title applicationsCount viewsCount');
+    const jobIds = jobs.map(j => j._id);
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [statusBreakdown, applicationsOverTime] = await Promise.all([
+      Application.aggregate([
+        { $match: { jobId: { $in: jobIds } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Application.aggregate([
+        { $match: { jobId: { $in: jobIds }, createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+
+    const totalApplications = statusBreakdown.reduce((sum, s) => sum + s.count, 0);
+    const hired = statusBreakdown.find(s => s._id === 'hired')?.count || 0;
+    const hireRate = totalApplications > 0 ? Math.round((hired / totalApplications) * 100) : 0;
+    const topJobs = [...jobs]
+      .sort((a, b) => b.applicationsCount - a.applicationsCount)
+      .slice(0, 5)
+      .map(j => ({ title: j.title, applicationsCount: j.applicationsCount, viewsCount: j.viewsCount }));
+
+    res.json({
+      success: true,
+      analytics: {
+        statusBreakdown,
+        applicationsOverTime,
+        topJobs,
+        totalApplications,
+        hired,
+        hireRate,
+        totalJobs: jobs.length,
+        totalViews: jobs.reduce((sum, j) => sum + (j.viewsCount || 0), 0),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { setIo, applyToJob, getMyApplications, getJobApplications, updateApplicationStatus, scheduleInterview, withdrawApplication, bulkUpdateStatus, getAnalytics };

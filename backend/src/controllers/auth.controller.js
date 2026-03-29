@@ -1,7 +1,7 @@
 const User = require('../models/User.model');
 const CandidateProfile = require('../models/CandidateProfile.model');
 const { generateToken, generateOTP } = require('../utils/generateToken');
-const { sendEmail, emailTemplates } = require('../utils/email');
+const { queueEmail, emailTemplates } = require('../utils/email');
 
 // @POST /api/auth/register
 const register = async (req, res) => {
@@ -30,7 +30,7 @@ const register = async (req, res) => {
     }
 
     const tpl = emailTemplates.verifyEmail(name, otp);
-    await sendEmail({ to: email, ...tpl });
+    await queueEmail({ to: email, ...tpl });
 
     const token = generateToken(user._id);
     res.status(201).json({
@@ -90,7 +90,7 @@ const resendOtp = async (req, res) => {
       otp: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), type: 'email_verification' },
     });
     const tpl = emailTemplates.verifyEmail(user.name, otp);
-    await sendEmail({ to: user.email, ...tpl });
+    await queueEmail({ to: user.email, ...tpl });
     res.json({ success: true, message: 'OTP resent to your email' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -149,7 +149,7 @@ const forgotPassword = async (req, res) => {
       otp: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), type: 'password_reset' },
     });
     const tpl = emailTemplates.passwordReset(user.name, otp);
-    await sendEmail({ to: email, ...tpl });
+    await queueEmail({ to: email, ...tpl });
     res.json({ success: true, message: 'Password reset OTP sent to your email' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

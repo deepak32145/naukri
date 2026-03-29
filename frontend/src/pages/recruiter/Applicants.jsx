@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../utils/axios';
-import { Download, MessageSquare, Calendar, ChevronDown, Search } from 'lucide-react';
+import { Download, MessageSquare, Calendar, ChevronDown, Search, CheckSquare, Square, Zap } from 'lucide-react';
 import StatusBadge from '../../components/common/StatusBadge';
 import { timeAgo, getInitials, formatDate } from '../../utils/helpers';
 import Spinner from '../../components/common/Spinner';
@@ -58,6 +58,9 @@ const Applicants = () => {
   const [search, setSearch] = useState('');
   const [interviewModal, setInterviewModal] = useState(null);
   const [expandedApp, setExpandedApp] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkStatus, setBulkStatus] = useState('shortlisted');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -96,6 +99,34 @@ const Applicants = () => {
     return matchStatus && matchSearch;
   });
 
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(a => a._id)));
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!selected.size) return;
+    setBulkLoading(true);
+    try {
+      await api.put('/applications/bulk-status', { applicationIds: [...selected], status: bulkStatus });
+      setApplications(prev => prev.map(a => selected.has(a._id) ? { ...a, status: bulkStatus } : a));
+      setSelected(new Set());
+      toast.success(`${selected.size} application(s) moved to ${bulkStatus.replace(/_/g, ' ')}`);
+    } catch { toast.error('Bulk update failed'); }
+    finally { setBulkLoading(false); }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <div className="mb-5">
@@ -120,15 +151,53 @@ const Applicants = () => {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-3 mb-4 bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <button onClick={toggleSelectAll} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-indigo-600">
+            {selected.size === filtered.length && filtered.length > 0
+              ? <CheckSquare size={15} className="text-indigo-600" />
+              : <Square size={15} />}
+            {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+          </button>
+          {selected.size > 0 && (
+            <>
+              <div className="h-4 w-px bg-gray-200" />
+              <div className="flex items-center gap-2 flex-1">
+                <Zap size={14} className="text-indigo-500 shrink-0" />
+                <span className="text-xs text-gray-600 shrink-0">Move to</span>
+                <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                </select>
+                <button onClick={handleBulkUpdate} disabled={bulkLoading}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-medium disabled:opacity-60 hover:bg-indigo-700">
+                  {bulkLoading ? 'Updating...' : 'Apply'}
+                </button>
+                <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">
+                  Clear
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {loading ? <Spinner className="py-12" /> : filtered.length === 0 ? (
         <div className="text-center py-16"><p className="text-4xl mb-3">👤</p><p className="text-gray-500">No applicants found</p></div>
       ) : (
         <div className="space-y-4">
           {filtered.map((app) => (
-            <div key={app._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div key={app._id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${selected.has(app._id) ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-gray-100'}`}>
               <div className="p-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
+                    {/* Checkbox */}
+                    <button onClick={() => toggleSelect(app._id)} className="shrink-0 text-gray-400 hover:text-indigo-600">
+                      {selected.has(app._id)
+                        ? <CheckSquare size={18} className="text-indigo-600" />
+                        : <Square size={18} />}
+                    </button>
                     {app.candidateId?.avatar?.url ? (
                       <img src={app.candidateId.avatar.url} alt={app.candidateId.name} className="w-12 h-12 rounded-full object-cover" />
                     ) : (
@@ -142,6 +211,11 @@ const Applicants = () => {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {app.referredBy?.name && (
+                      <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-medium">
+                        Referred by {app.referredBy.name}
+                      </span>
+                    )}
                     <StatusBadge status={app.status} />
                     <span className="text-xs text-gray-400">{timeAgo(app.createdAt)}</span>
                     <button onClick={() => setExpandedApp(expandedApp === app._id ? null : app._id)} className="p-1 text-gray-400 hover:text-gray-600">
@@ -150,9 +224,8 @@ const Applicants = () => {
                   </div>
                 </div>
 
-                {/* Candidate Profile Snippet */}
                 {app.candidateProfile && (
-                  <div className="flex flex-wrap gap-3 mt-3">
+                  <div className="flex flex-wrap gap-3 mt-3 ml-9">
                     {app.candidateProfile.experienceYears !== undefined && (
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">{app.candidateProfile.experienceYears} yrs exp</span>
                     )}
@@ -165,8 +238,7 @@ const Applicants = () => {
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex flex-wrap gap-2 mt-4">
+                <div className="flex flex-wrap gap-2 mt-4 ml-9">
                   <select value={app.status} onChange={(e) => handleStatusChange(app._id, e.target.value)}
                     className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500">
                     <option value="applied">Applied</option>
@@ -186,7 +258,6 @@ const Applicants = () => {
                 </div>
               </div>
 
-              {/* Expanded: Cover Letter + Timeline */}
               {expandedApp === app._id && (
                 <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50">
                   {app.coverLetter && (

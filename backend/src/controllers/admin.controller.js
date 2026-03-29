@@ -100,4 +100,37 @@ const verifyCompany = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getAllUsers, banUser, getAllJobs, deleteJob, verifyCompany };
+// @PUT /api/admin/candidates/:id/verify  { status: 'verified' | 'none' }
+const verifyCandidate = async (req, res) => {
+  try {
+    const CandidateProfile = require('../models/CandidateProfile.model');
+    const { status } = req.body;
+    if (!['verified', 'none'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'status must be verified or none' });
+    }
+    const profile = await CandidateProfile.findOneAndUpdate(
+      { userId: req.params.id },
+      { verificationStatus: status },
+      { new: true }
+    );
+    if (!profile) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+    res.json({ success: true, verificationStatus: profile.verificationStatus });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @GET /api/admin/candidates/pending-verification
+const getPendingVerifications = async (req, res) => {
+  try {
+    const CandidateProfile = require('../models/CandidateProfile.model');
+    const profiles = await CandidateProfile.find({ verificationStatus: 'pending' })
+      .populate('userId', 'name email')
+      .select('userId headline completenessScore verificationStatus');
+    res.json({ success: true, profiles });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getStats, getAllUsers, banUser, getAllJobs, deleteJob, verifyCompany, verifyCandidate, getPendingVerifications };

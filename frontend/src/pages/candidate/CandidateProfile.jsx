@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchMe } from '../../redux/slices/authSlice';
 import api from '../../utils/axios';
-import { Edit, Upload, Briefcase, GraduationCap, Code, Award, Globe, Linkedin, Github, Eye, MapPin, Phone, Mail, Download, CheckCircle2 } from 'lucide-react';
+import { Edit, Upload, Briefcase, GraduationCap, Code, Award, Globe, Linkedin, Github, Eye, MapPin, Phone, Mail, Download, CheckCircle2, BadgeCheck, ShieldCheck, Clock, Sparkles, X, Check } from 'lucide-react';
 import ProfileCompleteness from '../../components/common/ProfileCompleteness';
 import { formatDate, getInitials, timeAgo } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -16,6 +16,11 @@ const CandidateProfile = () => {
   const [viewStats, setViewStats] = useState({ total: 0, thisWeek: 0, profileViews: [] });
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [parseModal, setParseModal] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [parsedData, setParsedData] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const parseInputRef = useRef(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -35,6 +40,16 @@ const CandidateProfile = () => {
     };
     fetchProfile();
   }, []);
+
+  const handleRequestVerification = async () => {
+    try {
+      await api.post('/candidate/verify');
+      setProfile(p => ({ ...p, verificationStatus: 'pending' }));
+      toast.success('Verification request submitted!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request verification');
+    }
+  };
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
@@ -66,6 +81,41 @@ const CandidateProfile = () => {
     } finally { setUploading(false); }
   };
 
+  const handleParseResume = async (e) => {
+    const file = e.target.files[0];
+    if (!file || file.type !== 'application/pdf') { toast.error('Please select a PDF file'); return; }
+    const formData = new FormData();
+    formData.append('resume', file);
+    setParsing(true);
+    setParsedData(null);
+    try {
+      const { data } = await api.post('/candidate/resume/parse', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setParsedData(data.parsed);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to parse resume');
+      setParseModal(false);
+    } finally {
+      setParsing(false);
+      if (parseInputRef.current) parseInputRef.current.value = '';
+    }
+  };
+
+  const handleImportParsed = async () => {
+    if (!parsedData) return;
+    setImporting(true);
+    try {
+      const { data } = await api.post('/candidate/profile/import', parsedData);
+      setProfile(data.profile);
+      setParseModal(false);
+      setParsedData(null);
+      toast.success('Profile updated from resume!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to import profile');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (loading) return <Spinner className="py-24" />;
 
   return (
@@ -89,8 +139,14 @@ const CandidateProfile = () => {
             <h2 className="font-bold text-gray-900 text-lg">{user?.name}</h2>
             <p className="text-indigo-600 text-sm mt-0.5">{profile?.headline || 'Add a headline'}</p>
             {user?.isEmailVerified ? (
-              <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-1"><CheckCircle2 size={12} />Verified</span>
+              <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-1"><CheckCircle2 size={12} />Email Verified</span>
             ) : null}
+            {profile?.verificationStatus === 'verified' && (
+              <span className="inline-flex items-center gap-1 text-xs text-indigo-600 mt-1 font-semibold"><BadgeCheck size={13} />Identity Verified</span>
+            )}
+            {profile?.verificationStatus === 'pending' && (
+              <span className="inline-flex items-center gap-1 text-xs text-yellow-600 mt-1"><Clock size={12} />Verification Pending</span>
+            )}
             <div className="mt-3 space-y-1.5 text-xs text-gray-500">
               {user?.email && <p className="flex items-center justify-center gap-1"><Mail size={12} />{user.email}</p>}
               {user?.phone && <p className="flex items-center justify-center gap-1"><Phone size={12} />{user.phone}</p>}
@@ -104,6 +160,15 @@ const CandidateProfile = () => {
             <Link to="/profile/edit" className="mt-4 flex items-center justify-center gap-1.5 w-full py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-100">
               <Edit size={14} /> Edit Profile
             </Link>
+            <Link to="/resume-builder" className="mt-2 flex items-center justify-center gap-1.5 w-full py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50">
+              <Download size={14} /> Build Resume PDF
+            </Link>
+            {profile?.verificationStatus === 'none' && (
+              <button onClick={handleRequestVerification}
+                className="mt-2 flex items-center justify-center gap-1.5 w-full py-2.5 border border-indigo-200 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-50">
+                <ShieldCheck size={14} /> Request Verification
+              </button>
+            )}
           </div>
 
           {/* Profile Completeness */}
@@ -138,6 +203,10 @@ const CandidateProfile = () => {
                 <input type="file" accept="application/pdf" onChange={handleResumeUpload} className="hidden" disabled={uploading} />
               </label>
             )}
+            <button onClick={() => { setParsedData(null); setParseModal(true); }}
+              className="mt-3 flex items-center justify-center gap-1.5 w-full py-2.5 bg-linear-to-r from-violet-500 to-indigo-500 text-white rounded-xl text-xs font-semibold hover:opacity-90">
+              <Sparkles size={13} /> Parse Resume with AI
+            </button>
           </div>
 
           {/* Profile Views Summary (sidebar) */}
@@ -314,6 +383,120 @@ const CandidateProfile = () => {
           )}
         </div>
       </div>
+
+      {/* AI Resume Parse Modal */}
+      {parseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-violet-500" />
+                <h2 className="font-semibold text-gray-900">Parse Resume with AI</h2>
+              </div>
+              <button onClick={() => { setParseModal(false); setParsedData(null); }} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+              {/* Upload area */}
+              {!parsedData && !parsing && (
+                <label className="flex flex-col items-center gap-3 p-8 border-2 border-dashed border-violet-200 rounded-xl cursor-pointer hover:bg-violet-50">
+                  <Sparkles size={28} className="text-violet-400" />
+                  <div className="text-center">
+                    <p className="font-medium text-gray-700">Upload your resume PDF</p>
+                    <p className="text-xs text-gray-400 mt-1">Claude AI will extract your experience, skills, education and more</p>
+                  </div>
+                  <input ref={parseInputRef} type="file" accept="application/pdf" onChange={handleParseResume} className="hidden" />
+                </label>
+              )}
+
+              {/* Parsing spinner */}
+              {parsing && (
+                <div className="flex flex-col items-center gap-3 py-10">
+                  <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">Analyzing your resume with AI…</p>
+                </div>
+              )}
+
+              {/* Parsed preview */}
+              {parsedData && (
+                <div className="space-y-4 text-sm">
+                  <p className="text-xs text-gray-400 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Review the extracted data below. Clicking "Import to Profile" will overwrite the matching fields.
+                  </p>
+
+                  {parsedData.headline && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Headline</p>
+                    <p className="text-gray-800">{parsedData.headline}</p></div>
+                  )}
+
+                  {parsedData.summary && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Summary</p>
+                    <p className="text-gray-600 text-xs leading-relaxed">{parsedData.summary}</p></div>
+                  )}
+
+                  {parsedData.skills?.length > 0 && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Skills</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {parsedData.skills.map(s => <span key={s} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs">{s}</span>)}
+                    </div></div>
+                  )}
+
+                  {parsedData.experience?.length > 0 && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Experience ({parsedData.experience.length})</p>
+                    <div className="space-y-2">
+                      {parsedData.experience.map((e, i) => (
+                        <div key={i} className="border-l-2 border-indigo-200 pl-3">
+                          <p className="font-medium text-gray-800">{e.title} — {e.company}</p>
+                          <p className="text-xs text-gray-400">{e.startDate?.slice(0, 7)} – {e.isCurrent ? 'Present' : e.endDate?.slice(0, 7)}</p>
+                        </div>
+                      ))}
+                    </div></div>
+                  )}
+
+                  {parsedData.education?.length > 0 && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Education ({parsedData.education.length})</p>
+                    <div className="space-y-2">
+                      {parsedData.education.map((e, i) => (
+                        <div key={i} className="border-l-2 border-green-200 pl-3">
+                          <p className="font-medium text-gray-800">{e.degree}{e.fieldOfStudy ? ` in ${e.fieldOfStudy}` : ''}</p>
+                          <p className="text-xs text-gray-400">{e.institution} · {e.startYear} – {e.isCurrentlyStudying ? 'Present' : e.endYear}</p>
+                        </div>
+                      ))}
+                    </div></div>
+                  )}
+
+                  {parsedData.projects?.length > 0 && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Projects ({parsedData.projects.length})</p>
+                    <p className="text-xs text-gray-500">{parsedData.projects.map(p => p.title).join(', ')}</p></div>
+                  )}
+
+                  {parsedData.certifications?.length > 0 && (
+                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Certifications ({parsedData.certifications.length})</p>
+                    <p className="text-xs text-gray-500">{parsedData.certifications.map(c => c.name).join(', ')}</p></div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {parsedData && (
+              <div className="px-6 py-4 border-t flex justify-end gap-3">
+                <label className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer hover:bg-gray-50">
+                  <Upload size={14} /> Try another file
+                  <input ref={parseInputRef} type="file" accept="application/pdf" onChange={handleParseResume} className="hidden" />
+                </label>
+                <button onClick={handleImportParsed} disabled={importing}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                  <Check size={14} /> {importing ? 'Importing…' : 'Import to Profile'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

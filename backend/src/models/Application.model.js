@@ -29,6 +29,7 @@ const applicationSchema = new mongoose.Schema({
   },
   timeline: [timelineSchema],
   recruiterNotes: { type: String },
+  referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });
 
 applicationSchema.index({ jobId: 1, candidateId: 1 }, { unique: true });
