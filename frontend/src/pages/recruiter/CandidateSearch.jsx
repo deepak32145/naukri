@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/axios';
 import { Search, MapPin, MessageSquare, User } from 'lucide-react';
 import { useDispatch } from 'react-redux';
 import { startConversation } from '../../redux/slices/chatSlice';
-import { useNavigate } from 'react-router-dom';
 import { getInitials } from '../../utils/helpers';
 import Spinner from '../../components/common/Spinner';
 import toast from 'react-hot-toast';
@@ -79,7 +78,7 @@ const CandidateSearch = () => {
       ) : (
         <div className="grid gap-4">
           {results.map((profile) => (
-            <div key={profile._id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div key={profile._id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/users/${profile.userId._id}`)}>
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
                   {profile.userId?.avatar?.url ? (
@@ -96,14 +95,13 @@ const CandidateSearch = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {profile.resume?.url && (
                     <a href={profile.resume.url} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs hover:bg-gray-50">View Resume</a>
                   )}
                   <button onClick={() => handleStartChat(profile.userId._id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-medium hover:bg-indigo-100">
                     <MessageSquare size={12} /> Chat
                   </button>
-                  <Link to={`/users/${profile.userId._id}`} className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50"><User size={14} /></Link>
                 </div>
               </div>
 

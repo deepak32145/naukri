@@ -125,7 +125,8 @@ describe('JobDetail — share button', () => {
     );
     if (shareBtnEl) {
       fireEvent.click(shareBtnEl);
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(window.location.href);
+      const base = window.location.href.split('?')[0];
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${base}?ref=u1`);
     } else {
       // Fallback: get all icon-only buttons in the header area
       const iconBtns = Array.from(document.querySelectorAll('button')).filter(
@@ -147,7 +148,7 @@ describe('JobDetail — share button', () => {
     );
     if (shareBtnEl) {
       fireEvent.click(shareBtnEl);
-      expect(toast.default.success).toHaveBeenCalledWith('Link copied!');
+      expect(toast.default.success).toHaveBeenCalledWith('Referral link copied!');
     } else {
       // The share button should be present
       const iconBtns = Array.from(document.querySelectorAll('button')).filter(

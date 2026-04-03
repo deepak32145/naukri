@@ -5,6 +5,7 @@ const { createUser, createCompany, createJob, createApplication } = require('./h
 
 jest.mock('../src/utils/email', () => ({
   sendEmail: jest.fn().mockResolvedValue(true),
+  queueEmail: jest.fn().mockResolvedValue(true),
   emailTemplates: {
     verifyEmail: jest.fn().mockReturnValue({ subject: '', html: '' }),
     applicationStatus: jest.fn().mockReturnValue({ subject: '', html: '' }),

@@ -6,6 +6,7 @@ import authReducer from '../../redux/slices/authSlice';
 import jobsReducer from '../../redux/slices/jobsSlice';
 import notificationReducer from '../../redux/slices/notificationSlice';
 import chatReducer from '../../redux/slices/chatSlice';
+import uiReducer from '../../redux/slices/uiSlice';
 
 /** Create a fresh test store with optional preloaded state */
 export const createTestStore = (preloadedState = {}) =>
@@ -15,6 +16,7 @@ export const createTestStore = (preloadedState = {}) =>
       jobs: jobsReducer,
       notifications: notificationReducer,
       chat: chatReducer,
+      ui: uiReducer,
     },
     preloadedState,
   });

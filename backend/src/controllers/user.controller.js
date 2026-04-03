@@ -71,8 +71,8 @@ const getUserById = async (req, res) => {
       profile = await CandidateProfile.findOne({ userId: user._id })
         .select('-jobAlerts -profileViews');
 
-      // Log profile view (don't log own view)
-      if (req.user && req.user._id.toString() !== req.params.id) {
+      // Log profile view (don't log own view, only recruiters)
+      if (req.user && req.user._id.toString() !== req.params.id && req.user.role === 'recruiter') {
         await CandidateProfile.findOneAndUpdate(
           { userId: req.params.id },
           { $push: { profileViews: { viewedBy: req.user._id, viewedAt: new Date() } } }

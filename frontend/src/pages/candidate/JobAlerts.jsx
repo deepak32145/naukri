@@ -11,6 +11,7 @@ const JobAlerts = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ keyword: '', location: '', skills: '', minSalary: '', jobType: '', frequency: 'daily' });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     api.get('/candidate/job-alerts')
@@ -33,11 +34,17 @@ const JobAlerts = () => {
   };
 
   const handleDelete = async (alertId) => {
+    if (deleting) return; // Prevent multiple deletes
+    setDeleting(alertId);
     try {
       await api.delete(`/candidate/job-alerts/${alertId}`);
       setAlerts((prev) => prev.filter((a) => a._id !== alertId));
       toast.success('Alert deleted');
-    } catch { toast.error('Failed to delete'); }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const inputClass = "w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
@@ -110,7 +117,7 @@ const JobAlerts = () => {
                   )}
                 </div>
               </div>
-              <button onClick={() => handleDelete(alert._id)} className="text-red-400 hover:text-red-600 shrink-0 p-1"><Trash2 size={16} /></button>
+              <button onClick={() => handleDelete(alert._id)} disabled={deleting === alert._id} className="text-red-400 hover:text-red-600 shrink-0 p-1 disabled:opacity-50 disabled:cursor-not-allowed"><Trash2 size={16} /></button>
             </div>
           ))}
         </div>

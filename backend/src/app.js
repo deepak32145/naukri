@@ -23,11 +23,24 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // Rate limiting — skip in test env to avoid false 429s
 if (process.env.NODE_ENV !== 'test') {
   const rateLimit = require('express-rate-limit');
-  app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+  
+  // Higher limit for user profile endpoint
+  app.use('/api/users/me', rateLimit({ 
+    windowMs: 15 * 60 * 1000, 
+    max: 1000, // Allow up to 1000 requests per 15 minutes for /api/users/me
+    message: 'Too many requests to user profile endpoint'
+  }));
+  
+  // Global rate limit
+  app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 }
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Passport
+const passport = require('./config/passport');
+app.use(passport.initialize());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

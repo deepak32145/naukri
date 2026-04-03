@@ -181,4 +181,15 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword };
+const googleCallback = async (req, res) => {
+  try {
+    const token = generateToken(req.user._id);
+    // Redirect to frontend with token
+    const redirectUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/auth/callback?token=${token}`;
+    res.redirect(redirectUrl);
+  } catch (error) {
+    res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`);
+  }
+};
+
+module.exports = { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword, googleCallback };

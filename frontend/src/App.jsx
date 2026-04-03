@@ -15,6 +15,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import CompanyProfile from './pages/CompanyProfile';
+import AuthCallback from './pages/AuthCallback';
 
 // Candidate Pages
 import CandidateProfile from './pages/candidate/CandidateProfile';
@@ -32,6 +33,7 @@ import CandidateSearch from './pages/recruiter/CandidateSearch';
 import CompanySetup from './pages/recruiter/CompanySetup';
 import EditJob from './pages/recruiter/EditJob';
 import Analytics from './pages/recruiter/Analytics';
+import UserProfile from './pages/recruiter/UserProfile';
 import ResumeBuilder from './pages/candidate/ResumeBuilder';
 
 // Shared Pages
@@ -47,6 +49,7 @@ import AdminJobs from './pages/admin/AdminJobs';
 // Layout
 import Navbar from './components/common/Navbar';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import LoadingBar from './components/common/LoadingBar';
 
 function App() {
   const dispatch = useDispatch();
@@ -64,6 +67,7 @@ function App() {
       <SocketProvider>
         <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         <Navbar />
+        <LoadingBar />
         <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />
@@ -71,6 +75,7 @@ function App() {
           <Route path="/register" element={initializing ? null : (!isAuthenticated ? <Register /> : <Navigate to="/" />)} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
           <Route path="/companies/:id" element={<CompanyProfile />} />
@@ -97,6 +102,7 @@ function App() {
           <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           <Route path="/recruiters/live" element={<ProtectedRoute roles={['candidate']}><LiveRecruiters /></ProtectedRoute>} />
+          <Route path="/users/:id" element={<ProtectedRoute roles={['recruiter', 'admin']}><UserProfile /></ProtectedRoute>} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />

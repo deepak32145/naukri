@@ -30,6 +30,12 @@ const renderApplicants = (state = recruiterAuth, jobId = 'j1') =>
     { preloadedState: state, initialEntries: [`/recruiter/jobs/${jobId}/applicants`] }
   );
 
+/** Expand/collapse row details (chevron); distinct from checkbox and other icon-only controls */
+const getApplicantExpandButton = () =>
+  Array.from(document.querySelectorAll('button')).find(
+    (btn) => btn.className.includes('p-1') && btn.className.includes('hover:text-gray-600')
+  );
+
 describe('Applicants — rendering', () => {
   it('renders job title and applicants header', async () => {
     renderApplicants();
@@ -69,7 +75,7 @@ describe('Applicants — rendering', () => {
   it('shows filter tabs', async () => {
     renderApplicants();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /All/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^All \(\d+\)$/ })).toBeInTheDocument();
     });
   });
 
@@ -346,7 +352,7 @@ describe('Applicants — filter by status', () => {
     await waitFor(() => {
       expect(screen.getByText('Test Candidate')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /All/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^All \(\d+\)$/ }));
     await waitFor(() => {
       expect(screen.getByText('Test Candidate')).toBeInTheDocument();
     });
@@ -413,19 +419,12 @@ describe('Applicants — expand applicant details', () => {
       expect(screen.getByText('Test Candidate')).toBeInTheDocument();
     });
 
-    // Click the expand chevron button
-    const chevronButtons = Array.from(document.querySelectorAll('button')).filter(
-      btn => btn.querySelector('svg') && !btn.textContent.trim()
-    );
-    const chevronBtn = chevronButtons.find(btn =>
-      btn.className.includes('text-gray') && !btn.className.includes('red')
-    );
-    if (chevronBtn) {
-      fireEvent.click(chevronBtn);
-      await waitFor(() => {
-        expect(screen.getByText('I am an excellent candidate for this role.')).toBeInTheDocument();
-      });
-    }
+    const expandBtn = getApplicantExpandButton();
+    expect(expandBtn).toBeTruthy();
+    fireEvent.click(expandBtn);
+    await waitFor(() => {
+      expect(screen.getByText('I am an excellent candidate for this role.')).toBeInTheDocument();
+    });
   });
 
   it('clicking expand chevron again collapses details', async () => {
@@ -451,19 +450,15 @@ describe('Applicants — expand applicant details', () => {
       expect(screen.getByText('Test Candidate')).toBeInTheDocument();
     });
 
-    const chevronButtons = Array.from(document.querySelectorAll('button')).filter(
-      btn => btn.querySelector('svg') && !btn.textContent.trim() && btn.className.includes('text-gray')
-    );
-    if (chevronButtons.length > 0) {
-      fireEvent.click(chevronButtons[0]);
-      await waitFor(() => {
-        expect(screen.getByText('My cover letter content here.')).toBeInTheDocument();
-      });
-      // Click again to collapse
-      fireEvent.click(chevronButtons[0]);
-      await waitFor(() => {
-        expect(screen.queryByText('My cover letter content here.')).not.toBeInTheDocument();
-      });
-    }
+    const expandBtn = getApplicantExpandButton();
+    expect(expandBtn).toBeTruthy();
+    fireEvent.click(expandBtn);
+    await waitFor(() => {
+      expect(screen.getByText('My cover letter content here.')).toBeInTheDocument();
+    });
+    fireEvent.click(expandBtn);
+    await waitFor(() => {
+      expect(screen.queryByText('My cover letter content here.')).not.toBeInTheDocument();
+    });
   });
 });

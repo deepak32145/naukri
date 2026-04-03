@@ -8,6 +8,7 @@ import authReducer from '../redux/slices/authSlice';
 import jobsReducer from '../redux/slices/jobsSlice';
 import notificationReducer from '../redux/slices/notificationSlice';
 import chatReducer from '../redux/slices/chatSlice';
+import uiReducer from '../redux/slices/uiSlice';
 
 vi.mock('../utils/socket', () => ({
   initSocket: vi.fn(),
@@ -25,6 +26,7 @@ const guestState = {
   jobs: { jobs: [], loading: false, error: null, total: 0, page: 1, totalPages: 1, savedJobs: [], currentJob: null },
   notifications: { notifications: [], unreadCount: 0, loading: false },
   chat: { activeConversation: null, conversations: [], messages: {}, loading: false, typingUsers: {}, onlineUserIds: [] },
+  ui: { loading: false },
 };
 
 const createStore = (preloadedState) =>
@@ -34,6 +36,7 @@ const createStore = (preloadedState) =>
       jobs: jobsReducer,
       notifications: notificationReducer,
       chat: chatReducer,
+      ui: uiReducer,
     },
     preloadedState,
   });

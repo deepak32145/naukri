@@ -91,7 +91,7 @@ describe('CandidateProfile — basic rendering', () => {
   it('shows verified badge when email is verified', async () => {
     renderWithProviders(<CandidateProfile />, { preloadedState: candidateAuth });
     await waitFor(() => {
-      expect(screen.getByText('Verified')).toBeInTheDocument();
+      expect(screen.getByText('Email Verified')).toBeInTheDocument();
     });
   });
 
@@ -156,6 +156,8 @@ describe('CandidateProfile — profile views', () => {
       http.get('http://localhost:5000/api/candidate/profile-views', () =>
         HttpResponse.json({
           success: true,
+          total: 2,
+          thisWeek: 1,
           profileViews: [
             { viewedBy: { _id: 'u2', name: 'Viewer One' }, viewedAt: new Date().toISOString() },
             { viewedBy: { _id: 'u3', name: 'Viewer Two' }, viewedAt: new Date().toISOString() },

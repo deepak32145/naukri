@@ -9,6 +9,7 @@ const { createUser } = require('./helpers');
 // Mock email so no real emails are sent
 jest.mock('../src/utils/email', () => ({
   sendEmail: jest.fn().mockResolvedValue(true),
+  queueEmail: jest.fn().mockResolvedValue(true),
   emailTemplates: {
     verifyEmail: jest.fn().mockReturnValue({ subject: 'Verify', html: '<p>OTP</p>' }),
     passwordReset: jest.fn().mockReturnValue({ subject: 'Reset', html: '<p>OTP</p>' }),
