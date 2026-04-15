@@ -38,6 +38,24 @@ if (process.env.NODE_ENV !== 'test') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Global multer — parses multipart/form-data for every route that doesn't
+// already have its own multer middleware (those routes own their stream).
+const multer = require('multer');
+const _globalUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+}).any();
+const MULTER_OWNED_ROUTES = [
+  '/api/users/me/avatar',
+  '/api/candidate/resume',     // Cloudinary upload + memory parse
+  '/api/companies',            // logo upload (dynamic :id segment)
+];
+app.use((req, res, next) => {
+  const skip = MULTER_OWNED_ROUTES.some((p) => req.path.startsWith(p));
+  if (skip) return next();
+  _globalUpload(req, res, next);
+});
+
 // Passport
 const passport = require('./config/passport');
 app.use(passport.initialize());

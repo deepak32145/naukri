@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('../config/passport');
-const { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword, googleCallback } = require('../controllers/auth.controller');
+const { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword, googleCallback, sendLoginOtp, verifyLoginOtp } = require('../controllers/auth.controller');
 const { protect } = require('../middleware/auth.middleware');
 
 router.post('/register', register);
@@ -11,6 +11,8 @@ router.post('/verify-email', protect, verifyEmail);
 router.post('/resend-otp', protect, resendOtp);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+router.post('/send-login-otp', sendLoginOtp);
+router.post('/verify-login-otp', verifyLoginOtp);
 
 // Google OAuth
 router.get('/google', (req, res) => {

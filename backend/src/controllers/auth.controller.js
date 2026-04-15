@@ -181,6 +181,73 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// @POST /api/auth/send-login-otp
+const sendLoginOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'No account found with this email' });
+    if (user.isBanned) return res.status(403).json({ success: false, message: 'Account banned. Contact support.' });
+
+    const otp = generateOTP();
+    await User.findByIdAndUpdate(user._id, {
+      otp: { code: otp, expiresAt: new Date(Date.now() + 10 * 60 * 1000), type: 'login_otp' },
+    });
+
+    const tpl = emailTemplates.loginOtp(user.name, otp);
+    await queueEmail({ to: email, ...tpl });
+
+    res.json({ success: true, message: 'Login OTP sent to your email' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @POST /api/auth/verify-login-otp
+const verifyLoginOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+
+    const userWithOtp = await User.collection.findOne({ email });
+    if (!userWithOtp) return res.status(404).json({ success: false, message: 'User not found' });
+    if (!userWithOtp.otp || userWithOtp.otp.type !== 'login_otp') {
+      return res.status(400).json({ success: false, message: 'No login OTP found. Please request a new one.' });
+    }
+    if (userWithOtp.otp.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP expired. Please request a new one.' });
+    }
+    if (userWithOtp.otp.code !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+
+    const user = await User.findOne({ email });
+    await User.findByIdAndUpdate(user._id, {
+      lastSeen: new Date(),
+      isEmailVerified: true,
+      $unset: { otp: 1 },
+    });
+
+    const token = generateToken(user._id);
+    res.json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        isEmailVerified: true,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const googleCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
@@ -192,4 +259,4 @@ const googleCallback = async (req, res) => {
   }
 };
 
-module.exports = { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword, googleCallback };
+module.exports = { register, login, logout, verifyEmail, resendOtp, forgotPassword, resetPassword, googleCallback, sendLoginOtp, verifyLoginOtp };

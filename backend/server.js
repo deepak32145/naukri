@@ -13,8 +13,8 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 connectDB();
-startEmailWorker();
-startDigestWorker();
+startEmailWorker().catch((err) => console.error('Email worker init error:', err.message));
+startDigestWorker().catch((err) => console.error('Digest worker init error:', err.message));
 
 const server = http.createServer(app);
 const io = initSocket(server);

@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { loginUser, clearError } from '../redux/slices/authSlice';
-import { Eye, EyeOff, Briefcase, User } from 'lucide-react';
+import { loginUser, clearError, sendLoginOtp, verifyLoginOtp } from '../redux/slices/authSlice';
+import { Eye, EyeOff, Briefcase, User, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { loading, error } = useSelector((s) => s.auth);
+  const { loading } = useSelector((s) => s.auth);
   const [form, setForm] = useState({ email: '', password: '' });
   const [show, setShow] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState('');
+
+  // OTP login state
+  const [otpMode, setOtpMode] = useState(false);
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+
   const from = location.state?.from?.pathname || '/';
 
   const handleGoogleLogin = () => {
@@ -39,6 +47,42 @@ const Login = () => {
     }
   };
 
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    if (!otpEmail) return toast.error('Please enter your email');
+    setOtpLoading(true);
+    const res = await dispatch(sendLoginOtp(otpEmail));
+    setOtpLoading(false);
+    if (sendLoginOtp.fulfilled.match(res)) {
+      setOtpSent(true);
+      toast.success('OTP sent to your email');
+    } else {
+      toast.error(res.payload || 'Failed to send OTP');
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otp) return toast.error('Please enter the OTP');
+    const res = await dispatch(verifyLoginOtp({ email: otpEmail, otp }));
+    if (verifyLoginOtp.fulfilled.match(res)) {
+      const role = res.payload.user.role;
+      toast.success(`Welcome back, ${res.payload.user.name}!`);
+      if (role === 'recruiter') navigate('/recruiter/dashboard');
+      else if (role === 'admin') navigate('/admin');
+      else navigate(from);
+    } else {
+      toast.error(res.payload || 'OTP verification failed');
+    }
+  };
+
+  const switchMode = () => {
+    setOtpMode(!otpMode);
+    setOtpSent(false);
+    setOtp('');
+    setOtpEmail('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -51,31 +95,96 @@ const Login = () => {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>
-              <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="you@example.com" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-              <div className="relative">
-                <input type={show ? 'text' : 'password'} required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-11"
-                  placeholder="Enter password" />
-                <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {show ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-sm text-indigo-600 hover:underline">Forgot password?</Link>
-            </div>
-            <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-              {loading ? 'Signing in...' : 'Sign In'}
+          {/* Mode toggle */}
+          <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-6">
+            <button
+              onClick={() => !otpMode || switchMode()}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${!otpMode ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              Password
             </button>
-          </form>
+            <button
+              onClick={() => otpMode || switchMode()}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${otpMode ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              Email OTP
+            </button>
+          </div>
+
+          {!otpMode ? (
+            /* ── Password login ── */
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>
+                <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="you@example.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <input type={show ? 'text' : 'password'} required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent pr-11"
+                    placeholder="Enter password" />
+                  <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {show ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Link to="/forgot-password" className="text-sm text-indigo-600 hover:underline">Forgot password?</Link>
+              </div>
+              <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+          ) : (
+            /* ── OTP login ── */
+            <div className="space-y-5">
+              {!otpSent ? (
+                <form onSubmit={handleSendOtp} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>
+                    <div className="relative">
+                      <input
+                        type="email" required value={otpEmail}
+                        onChange={(e) => setOtpEmail(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent pl-11"
+                        placeholder="you@example.com"
+                      />
+                      <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={otpLoading} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+                    {otpLoading ? 'Sending OTP...' : 'Send OTP'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-5">
+                  <div className="text-center p-3 bg-indigo-50 rounded-xl">
+                    <p className="text-sm text-indigo-700">OTP sent to <strong>{otpEmail}</strong></p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Enter OTP</label>
+                    <input
+                      type="text" required value={otp} maxLength={6}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-center tracking-[0.5em] font-bold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="------"
+                    />
+                    <p className="text-xs text-gray-500 mt-1.5">OTP expires in 10 minutes</p>
+                  </div>
+                  <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+                    {loading ? 'Verifying...' : 'Verify & Sign In'}
+                  </button>
+                  <button type="button" onClick={() => { setOtpSent(false); setOtp(''); }}
+                    className="w-full text-sm text-indigo-600 hover:underline">
+                    Resend OTP
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 text-center text-sm text-gray-500">
             Don't have an account?{' '}
@@ -161,11 +270,11 @@ const Login = () => {
           <div className="mt-6 p-4 bg-gray-50 rounded-xl">
             <p className="text-xs text-gray-500 font-medium mb-2">Quick demo:</p>
             <div className="flex gap-2">
-              <button onClick={() => setForm({ email: 'candidate@demo.com', password: 'demo123' })}
+              <button onClick={() => { setOtpMode(false); setForm({ email: 'candidate@demo.com', password: 'demo123' }); }}
                 className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2 border border-gray-200 rounded-lg hover:bg-white text-gray-600">
                 <User size={12} /> Candidate
               </button>
-              <button onClick={() => setForm({ email: 'recruiter@demo.com', password: 'demo123' })}
+              <button onClick={() => { setOtpMode(false); setForm({ email: 'recruiter@demo.com', password: 'demo123' }); }}
                 className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2 border border-gray-200 rounded-lg hover:bg-white text-gray-600">
                 <Briefcase size={12} /> Recruiter
               </button>

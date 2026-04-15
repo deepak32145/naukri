@@ -33,6 +33,26 @@ export const fetchMe = createAsyncThunk('auth/fetchMe', async (_, { rejectWithVa
   }
 });
 
+export const sendLoginOtp = createAsyncThunk('auth/sendLoginOtp', async (email, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post('/auth/send-login-otp', { email });
+    return data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Failed to send OTP');
+  }
+});
+
+export const verifyLoginOtp = createAsyncThunk('auth/verifyLoginOtp', async ({ email, otp }, { rejectWithValue }) => {
+  try {
+    const { data } = await api.post('/auth/verify-login-otp', { email, otp });
+    localStorage.setItem('token', data.token);
+    initSocket(data.token);
+    return data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'OTP verification failed');
+  }
+});
+
 export const logoutUser = createAsyncThunk('auth/logout', async (_, { rejectWithValue }) => {
   try {
     await api.post('/auth/logout');
@@ -96,6 +116,17 @@ const authSlice = createSlice({
         state.initializing = false;
         localStorage.removeItem('token');
       })
+      .addCase(sendLoginOtp.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(sendLoginOtp.fulfilled, (state) => { state.loading = false; })
+      .addCase(sendLoginOtp.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+      .addCase(verifyLoginOtp.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(verifyLoginOtp.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.isAuthenticated = true;
+      })
+      .addCase(verifyLoginOtp.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(logoutUser.fulfilled, (state) => {
         state.user = null;
         state.token = null;

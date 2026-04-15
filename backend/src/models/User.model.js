@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema({
   otp: {
     code: { type: String },
     expiresAt: { type: Date },
-    type: { type: String, enum: ['email_verification', 'password_reset'] },
+    type: { type: String, enum: ['email_verification', 'password_reset', 'login_otp'] },
   },
   lastSeen: { type: Date, default: Date.now },
 }, { timestamps: true });

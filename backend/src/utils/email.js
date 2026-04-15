@@ -89,6 +89,22 @@ const emailTemplates = {
     `,
   }),
 
+  loginOtp: (name, otp) => ({
+    subject: 'Your Naukri login OTP',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+        <h2 style="color:#4f46e5;">Login with OTP</h2>
+        <p>Hi ${name},</p>
+        <p>Use the OTP below to sign in to your Naukri account:</p>
+        <div style="background:#f3f4f6;padding:20px;text-align:center;border-radius:8px;margin:20px 0;">
+          <span style="font-size:32px;font-weight:bold;color:#4f46e5;letter-spacing:8px;">${otp}</span>
+        </div>
+        <p>This OTP expires in <strong>10 minutes</strong>.</p>
+        <p style="color:#6b7280;font-size:12px;">If you didn't request this, please ignore this email.</p>
+      </div>
+    `,
+  }),
+
   jobAlert: (candidateName, jobs) => ({
     subject: `New job matches for you!`,
     html: `
@@ -109,14 +125,19 @@ const emailTemplates = {
   }),
 };
 
-// Queue an email via BullMQ. Falls back to direct send if Redis is unavailable.
+// Queue an email via BullMQ. Falls back to direct send if Redis is unavailable or slow.
 const queueEmail = async ({ to, subject, html }) => {
   try {
     const { getEmailQueue } = require('../config/emailQueue');
     const queue = getEmailQueue();
-    await queue.add('send', { to, subject, html });
+    await Promise.race([
+      queue.add('send', { to, subject, html }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('queue_timeout')), 3000)
+      ),
+    ]);
   } catch {
-    // Redis down — send synchronously so the email still goes out
+    // Redis down or timed out — send synchronously so the email still goes out
     await sendEmail({ to, subject, html });
   }
 };

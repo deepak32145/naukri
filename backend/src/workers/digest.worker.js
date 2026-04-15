@@ -117,13 +117,32 @@ const runCompletenessNudges = async () => {
 
 // ── Worker setup ──────────────────────────────────────────────────────────────
 
-const startDigestWorker = () => {
+// TCP probe — resolves true only if Redis port is open
+const isRedisAvailable = (host, port) =>
+  new Promise((resolve) => {
+    const net = require('net');
+    const socket = net.createConnection({ host, port });
+    socket.setTimeout(2000);
+    socket.on('connect', () => { socket.destroy(); resolve(true); });
+    socket.on('error', () => resolve(false));
+    socket.on('timeout', () => { socket.destroy(); resolve(false); });
+  });
+
+const startDigestWorker = async () => {
   if (process.env.NODE_ENV === 'test') return;
 
+  const conn = getRedisConnection();
+  const available = await isRedisAvailable(conn.host, conn.port);
+  if (!available) {
+    console.log('Redis unavailable — digest worker skipped');
+    return;
+  }
+
   const digestQueue = new Queue('digest', {
-    connection: getRedisConnection(),
+    connection: conn,
     defaultJobOptions: { removeOnComplete: true, removeOnFail: 100 },
   });
+  digestQueue.on('error', (err) => console.error('Digest queue error:', err.message));
 
   // Schedule: every day at 8am
   digestQueue.add('daily', {}, {
