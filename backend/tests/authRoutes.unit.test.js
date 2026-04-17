@@ -16,6 +16,8 @@ jest.mock('../src/controllers/auth.controller', () => ({
   forgotPassword: (req, res) => res.status(200).json({ ok: true }),
   resetPassword: (req, res) => res.status(200).json({ ok: true }),
   googleCallback: (req, res) => res.status(200).json({ ok: true }),
+  sendLoginOtp: (req, res) => res.status(200).json({ ok: true }),
+  verifyLoginOtp: (req, res) => res.status(200).json({ ok: true }),
 }));
 
 jest.mock('../src/middleware/auth.middleware', () => ({

@@ -17,12 +17,27 @@ const mockQueue = jest.fn((name) => {
   const instance = {
     name,
     add: jest.fn().mockResolvedValue(true),
+    on: jest.fn(),
   };
   mockQueueInstances.push(instance);
   return instance;
 });
 
 jest.mock('bullmq', () => ({ Worker: mockWorker, Queue: mockQueue }));
+
+// Make TCP probes in isRedisAvailable() resolve as connected immediately
+jest.mock('net', () => {
+  const { EventEmitter } = require('events');
+  return {
+    createConnection: jest.fn(() => {
+      const socket = new EventEmitter();
+      socket.destroy = jest.fn();
+      socket.setTimeout = jest.fn();
+      process.nextTick(() => socket.emit('connect'));
+      return socket;
+    }),
+  };
+});
 
 const mockSendEmail = jest.fn().mockResolvedValue(true);
 const mockQueueEmail = jest.fn().mockResolvedValue(true);
@@ -77,7 +92,7 @@ describe('workers', () => {
 
   it('starts email worker and processes a job', async () => {
     const { startEmailWorker } = require('../src/workers/email.worker');
-    const worker = startEmailWorker();
+    const worker = await startEmailWorker();
     expect(worker).toBeDefined();
     expect(mockWorker).toHaveBeenCalledWith('email', expect.any(Function), expect.any(Object));
 
@@ -89,10 +104,10 @@ describe('workers', () => {
     worker.__handlers.error(new Error('boom'));
   });
 
-  it('skips worker startup in test env', () => {
+  it('skips worker startup in test env', async () => {
     process.env.NODE_ENV = 'test';
     const { startEmailWorker } = require('../src/workers/email.worker');
-    expect(startEmailWorker()).toBeUndefined();
+    expect(await startEmailWorker()).toBeUndefined();
   });
 
   it('starts digest worker, schedules queue and runs digest logic', async () => {
@@ -121,7 +136,7 @@ describe('workers', () => {
     mockRedisGet.mockResolvedValue(null);
 
     const { startDigestWorker } = require('../src/workers/digest.worker');
-    startDigestWorker();
+    await startDigestWorker();
 
     expect(mockQueue).toHaveBeenCalledWith('digest', expect.any(Object));
     expect(mockQueueInstances[0].add).toHaveBeenCalledWith('daily', {}, { repeat: { pattern: '0 8 * * *' } });
@@ -141,7 +156,7 @@ describe('workers', () => {
 
   it('handles digest queue scheduling failure', async () => {
     const { startDigestWorker } = require('../src/workers/digest.worker');
-    startDigestWorker();
+    await startDigestWorker();
     mockQueueInstances[0].add.mockRejectedValueOnce(new Error('queue down'));
     await mockQueueInstances[0].add('daily', {}, { repeat: { pattern: '0 8 * * *' } }).catch(() => {});
   });

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const morgan = require('morgan');
 
 const errorHandler = require('./middleware/error.middleware');
 const authRoutes = require('./routes/auth.routes');
@@ -15,6 +16,8 @@ const notificationRoutes = require('./routes/notification.routes');
 const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
+
+app.use(morgan('combined'));
 
 // cors must come before helmet so its headers are never overridden
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));

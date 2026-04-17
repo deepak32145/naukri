@@ -25,7 +25,8 @@ const getEmailQueue = () => {
       },
     });
     emailQueue.on('error', (err) => {
-      console.error('Email queue error:', err.message);
+      console.warn('Email queue unavailable (Redis down?) — falling back to direct send:', err.message);
+      emailQueue = null; // reset so next call recreates it once Redis is back
     });
   }
   return emailQueue;
